@@ -1,91 +1,67 @@
+# app.py
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional
 from crewai import Agent, Task, Crew
+import uvicorn
 import os
 
 app = FastAPI()
 
-# 🔸 Праверка працы API
+# ✅ Дадаем CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Альбо ўкажы дакладны frontend URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Healthcheck
 @app.get("/")
 def root():
     return {"message": "👋 CrewAI API is running!"}
 
-# 🔹 Уваходная мадэль для /ask
+# --- ASK ENDPOINT ---
 class AskRequest(BaseModel):
     question: str
 
 @app.post("/ask")
 async def ask_agent(request: AskRequest):
     question = request.question
-
     agent = Agent(
         role="AI Assistant",
         goal="Answer business-related questions and assist with client requests",
         backstory="You're Arthur, an AI assistant built by TechTask. You're helpful, polite and smart.",
         verbose=True
     )
-
     task = Task(description=question, agent=agent)
-
-    crew = Crew(
-        agents=[agent],
-        tasks=[task],
-        verbose=True
-    )
-
+    crew = Crew(agents=[agent], tasks=[task], verbose=True)
     result = crew.run()
     return {"question": question, "answer": result}
 
-
-# 🧠 Агенты
-agents_storage = []
-
-class AgentInput(BaseModel):
-    role: str
-    goal: str
-    backstory: Optional[str] = None
-
+# --- /agents ENDPOINT ---
 @app.get("/agents")
-def list_agents():
-    return {"agents": agents_storage}
+def get_agents():
+    return [{
+        "role": "AI Assistant",
+        "goal": "Answer business-related questions",
+        "backstory": "You're Arthur, an AI assistant built by TechTask."
+    }]
 
-@app.post("/agents")
-def create_agent(agent: AgentInput):
-    agents_storage.append(agent.dict())
-    return {"message": "Agent created", "agent": agent}
-
-
-# 🔧 Інструменты (пакуль пуста)
+# --- /tools ENDPOINT ---
 @app.get("/tools")
-def list_tools():
-    return {"tools": []}
+def get_tools():
+    return [{
+        "name": "DefaultTool",
+        "description": "No custom tools yet."
+    }]
 
-
-# 🤝 Стварэнне Crew (з умовай, што ёсць хаця б адзін агент)
-class CrewInput(BaseModel):
-    task_description: str
-
-@app.post("/crews")
-def run_crew(input: CrewInput):
-    if not agents_storage:
-        return {"error": "No agents created yet"}
-
-    agents = [
-        Agent(
-            role=a["role"],
-            goal=a["goal"],
-            backstory=a.get("backstory", ""),
-            verbose=True
-        )
-        for a in agents_storage
-    ]
-
-    task = Task(
-        description=input.task_description,
-        agent=agents[0]  # першы як асноўны
-    )
-
-    crew = Crew(agents=agents, tasks=[task], verbose=True)
-    result = crew.run()
-    return {"task": input.task_description, "result": result}
+# --- /crews ENDPOINT ---
+@app.get("/crews")
+def get_crews():
+    return [{
+        "name": "DefaultCrew",
+        "agents": ["AI Assistant"],
+        "tasks": ["Answer questions"]
+    }]
